@@ -553,9 +553,23 @@ Call sites: `ExtraKeysView`, `TabStripView`, `SearchBarView`, `MainActivity`
 ### Sessions and tabs
 
 `SessionManager` is a process singleton, so rotation/recreation keeps shells
-alive. Sessions end when the process is killed (no foreground service —
-a deliberate scope cut, documented in the README). Closing the last tab
-finishes the activity.
+alive. A foreground service (`SessionService`) holds the process at
+foreground priority while sessions exist, so backgrounding and a swipe from
+Recents do not kill the shells either — but nothing can keep a shell alive
+through a real process death (force-stop, LMK): the PTY dies with its process
+and a detached supervisor to keep shells outliving it is deliberately not
+built. What does survive process death is the tab layout and each session's
+visible scrollback. Every registered session (not VM tabs — a machine whose
+emulator died cannot answer a replayed prompt) mirrors its raw PTY output to
+a bounded on-disk ring under `filesDir/session-replay` (`ReplayLog`, two
+1 MiB windows) and records a small entry in `filesDir/session_registry.json`
+(`SessionRegistry`, atomic temp+rename publish) that names the tab as a
+userland or shell session. A clean end — the service's "Exit" action, or the
+last tab closing — clears the saved set; only a death nobody asked for leaves
+it standing, and then the next launch (gated on a "Restore tabs after a
+crash" setting, default on) rebuilds every saved tab as a fresh shell with
+the recorded bytes fed to the emulator before the new prompt, so the scrollback
+reads across the restart. Closing the last tab finishes the activity.
 
 When a userland rootfs is installed, new tabs default to userland (and to an
 Android `/system/bin/sh` tab when it isn't). Long-pressing `+` no longer

@@ -118,8 +118,13 @@ made of regular files, directories and links only.
   to the bottom.
 - **Font size**: pinch to zoom (8–40 sp, persisted across restarts); the
   shell grid reflows to the new cell size.
-- **Lifecycle**: sessions survive rotation but not process death; there is
-  no background service keeping shells alive once the app is killed.
+- **Lifecycle**: sessions survive rotation, backgrounding and a swipe from
+  Recents — a foreground-service notification holds the process while shells
+  run, with an "Exit" action to end them deliberately. After an unexpected
+  process death (crash or system kill), the next launch reopens the tabs as
+  fresh shells with the recorded terminal output replayed above the prompt
+  (Settings → "Restore tabs after a crash"). Long-running work that must
+  outlive the shell itself still needs a terminal multiplexer in the guest.
 
 ## Tests
 
