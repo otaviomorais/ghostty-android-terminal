@@ -70,7 +70,7 @@ public final class SessionRegistry {
         for (int i = 0; i < entries.length(); i++) {
             JSONObject e = entries.optJSONObject(i);
             if (e == null || e.optInt("id", 0) <= 0) continue;
-            out.add(new Entry(e.getInt("id"),
+            out.add(new Entry(e.optInt("id"),
                     e.optBoolean("userland", false),
                     e.optString("label", "sh")));
         }
