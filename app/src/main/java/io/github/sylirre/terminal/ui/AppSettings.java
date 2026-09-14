@@ -61,6 +61,7 @@ public final class AppSettings {
     private static final String KEY_USERLAND_JIT = "userland_jit";
     private static final String KEY_USERLAND_JIT_MB = "userland_jit_mb";
     private static final String KEY_USERLAND_CHROOT_NG = "userland_chroot_ng";
+    private static final String KEY_RESTORE_SESSIONS = "restore_sessions";
     private static final String KEY_VM_MEMORY_MB = "vm_memory_mb";
     private static final String KEY_VM_TERMINALS = "vm_terminals";
     private static final String KEY_VM_JIT = "vm_jit";
@@ -481,6 +482,21 @@ public final class AppSettings {
 
     public void setUserlandChrootNgEnabled(boolean enabled) {
         prefs.edit().putBoolean(KEY_USERLAND_CHROOT_NG, enabled).apply();
+    }
+
+    /**
+     * When true, the open tabs are rebuilt after a process death (crash or
+     * system kill): each saved tab reopens as a fresh shell with its recorded
+     * output replayed above the first prompt. A clean "Exit" or last-tab close
+     * clears the saved set, so this only ever fires on a death the user didn't
+     * ask for. Defaults to on.
+     */
+    public boolean restoreSessions() {
+        return prefs.getBoolean(KEY_RESTORE_SESSIONS, true);
+    }
+
+    public void setRestoreSessions(boolean enabled) {
+        prefs.edit().putBoolean(KEY_RESTORE_SESSIONS, enabled).apply();
     }
 
     /**

@@ -55,6 +55,7 @@ import io.github.sylirre.terminal.R;
 import io.github.sylirre.terminal.term.UserlandRootfs;
 import io.github.sylirre.terminal.term.RootfsBackup;
 import io.github.sylirre.terminal.term.SessionManager;
+import io.github.sylirre.terminal.term.SessionRegistry;
 import io.github.sylirre.terminal.term.SessionService;
 import io.github.sylirre.terminal.term.TerminalSession;
 import io.github.sylirre.terminal.term.UserlandOptions;
@@ -269,7 +270,12 @@ public class MainActivity extends Activity implements TerminalSession.Listener {
                     // inside layout() is dropped until the next traversal —
                     // which otherwise only arrives on the first touch.
                     terminal.post(() -> {
-                        if (sessions.isEmpty()) createFirstSession();
+                        if (!sessions.isEmpty()) return;
+                        // A previous process died with tabs open (crash,
+                        // system kill): rebuild them before deciding to
+                        // start a fresh single session.
+                        if (restoreGate()) return;
+                        createFirstSession();
                     });
                 }
             });
@@ -479,6 +485,14 @@ public class MainActivity extends Activity implements TerminalSession.Listener {
     }
 
     private void createSession(boolean userland) {
+        createSession(userland, null);
+    }
+
+    /**
+     * Opens one tab. {@code replay} — when a restore passes it — carries a
+     * dead process's recorded output, rendered above the new shell's prompt.
+     */
+    private void createSession(boolean userland, byte[] replay) {
         try {
             UserlandOptions userlandOptions = new UserlandOptions(
                     settings.userlandLoginShell(), storageBindingEnabledForNewSession(),
@@ -491,7 +505,7 @@ public class MainActivity extends Activity implements TerminalSession.Listener {
                     terminal.gridCols(), terminal.gridRows(),
                     terminal.cellWidthPx(), terminal.cellHeightPx(),
                     settings.scrollbackLines(), userland, userlandOptions,
-                    settings.terminateProcessesOnExit(), this);
+                    settings.terminateProcessesOnExit(), this, replay);
             switchTo(s);
             applyTheme(); // color the new session before any output arrives
             if (settings.touchKeyboard()) showKeyboard();
@@ -513,6 +527,49 @@ public class MainActivity extends Activity implements TerminalSession.Listener {
                 if (sessions.isEmpty()) finishAndRemoveTask();
             }
         }
+    }
+
+    /**
+     * Restore gate for the launch hook: the test seam and the onboarding
+     * wizard never restore, and a disabled setting consumes the saved set
+     * rather than carrying it forward.
+     */
+    private boolean restoreGate() {
+        if (forceShell || awaitingOnboarding) return false;
+        if (!settings.restoreSessions()) {
+            List<SessionRegistry.Entry> stale = sessions.savedEntries(this);
+            if (!stale.isEmpty()) sessions.forgetSaved(this);
+            return false;
+        }
+        return restoreSavedSessions();
+    }
+
+    /**
+     * Rebuilds the tabs a previous process died with (crash, system kill):
+     * one fresh shell per saved entry, each fed the output the old shell had
+     * written into its tab. The saved set is consumed first, so a failure
+     * partway through — or a crash during this very launch — cannot make a
+     * stale tab list resurface on every start afterwards.
+     *
+     * @return true if at least one tab came back (nothing else should spawn).
+     */
+    private boolean restoreSavedSessions() {
+        List<SessionRegistry.Entry> saved = sessions.savedEntries(this);
+        if (saved.isEmpty()) return false;
+        List<byte[]> replays = new ArrayList<>(saved.size());
+        for (SessionRegistry.Entry e : saved) {
+            replays.add(sessions.savedReplay(this, e.id));
+        }
+        sessions.forgetSaved(this);
+        int restored = 0;
+        for (int i = 0; i < saved.size(); i++) {
+            createSession(saved.get(i).userland, replays.get(i));
+            restored++;
+        }
+        if (restored == 0) return false;
+        Toast.makeText(this, getString(R.string.toast_sessions_restored, restored),
+                Toast.LENGTH_LONG).show();
+        return true;
     }
 
     // --- new-tab chooser ----------------------------------------------------

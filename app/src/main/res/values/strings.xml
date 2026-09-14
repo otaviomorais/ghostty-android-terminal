@@ -118,6 +118,8 @@
     <string name="session_close_confirm_button">Close</string>
     <string name="setting_terminate_processes_title">Terminate session processes on exit</string>
     <string name="setting_terminate_processes_summary">Processes in session that is being closed will receive the kill signal.</string>
+    <string name="setting_restore_sessions_title">Restore tabs after a crash</string>
+    <string name="setting_restore_sessions_summary">When the app\'s process dies unexpectedly, the next launch reopens its tabs as fresh shells with the old terminal output replayed above the prompt.</string>
 
     <!-- New-session chooser (long-press +) -->
     <string name="session_type_title">New session</string>
@@ -379,6 +381,7 @@
     <string name="toast_shell_start_failed">Failed to start shell: %s</string>
     <string name="toast_userland_unavailable">Userland unavailable (%s); starting the Android shell instead.</string>
     <string name="toast_userland_session_failed">Userland session failed to start; starting the Android shell instead.</string>
+    <string name="toast_sessions_restored">Restored %1$d tab(s) from a session that died; the shells are new, their recorded output is replayed.</string>
 
     <!-- Transient grid-size HUD shown while pinch-zooming (columns × rows) -->
     <string name="grid_size_overlay">%1$d×%2$d</string>

@@ -240,6 +240,11 @@ public final class SettingsActivity extends Activity {
                 getString(R.string.setting_terminate_processes_summary),
                 settings::terminateProcessesOnExit,
                 settings::setTerminateProcessesOnExit));
+        terminal.add(new Setting.Toggle(
+                getString(R.string.setting_restore_sessions_title),
+                getString(R.string.setting_restore_sessions_summary),
+                settings::restoreSessions,
+                settings::setRestoreSessions));
         sections.add(new SettingsSection(getString(R.string.settings_group_terminal), terminal));
 
         // Userland-specific settings: arm64chroot runs the aarch64 rootfs on
