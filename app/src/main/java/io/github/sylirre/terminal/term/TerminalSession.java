@@ -128,6 +128,17 @@ public final class TerminalSession {
     // session the user used from one that died before they could touch it.
     private volatile boolean userInteracted;
 
+    /**
+     * On-disk mirror of this session's PTY output, for the scrollback replay
+     * that rebuilds the tab after a process death. Null for sessions the
+     * {@link SessionManager} did not register (direct constructions, tests,
+     * VM tabs), and attached only just after construction, so the shell's
+     * first few reads may miss it — history the fresh shell reprints anyway.
+     */
+    private volatile ReplayLog replayLog;
+    /** The registry entry id this session was registered under; 0 if none. */
+    private volatile int sessionId;
+
     /** Spawns /system/bin/sh; see {@link SessionCommand#androidShell}. */
     public TerminalSession(int cols, int rows, int cellWidthPx, int cellHeightPx,
             int scrollbackLines, String homeDir, String tmpDir, Listener listener)
@@ -154,6 +165,22 @@ public final class TerminalSession {
             int scrollbackLines, SessionCommand command,
             boolean terminateProcessesOnExit, Listener listener)
             throws IOException {
+        this(cols, rows, cellWidthPx, cellHeightPx, scrollbackLines, command,
+                terminateProcessesOnExit, null, listener);
+    }
+
+    /**
+     * As above, but when {@code replay} carries the PTY output of a session
+     * from a previous process it is fed to the emulator before the PTY is
+     * created: the rebuilt tab opens showing the old scrollback, with the new
+     * shell's output appending below it. Query replies the old programs would
+     * have earned are discarded — those programs are gone, and the live shell
+     * has not asked anything yet.
+     */
+    public TerminalSession(int cols, int rows, int cellWidthPx, int cellHeightPx,
+            int scrollbackLines, SessionCommand command,
+            boolean terminateProcessesOnExit, byte[] replay, Listener listener)
+            throws IOException {
         this.listener = listener;
         this.label = command.label;
         this.userland = command.userland;
@@ -161,6 +188,9 @@ public final class TerminalSession {
         this.vmTerminal = -1;
         this.terminateProcessesOnExit = terminateProcessesOnExit;
         this.emulator = new TerminalEmulator(cols, rows, scrollbackLines);
+        if (replay != null && replay.length > 0) {
+            emulator.feed(replay, replay.length);
+        }
 
         int[] pidOut = new int[1];
         int fd;
@@ -242,6 +272,8 @@ public final class TerminalSession {
                 // Passive tap for OSC 52 / OSC 9;4 before the engine sees the
                 // bytes; it reads, never mutates, so ordering doesn't matter.
                 oscScanner.scan(buf, n);
+                ReplayLog rl = replayLog;
+                if (rl != null) rl.append(buf, n);
                 byte[] response = emulator.feed(buf, n);
                 if (response != null) writeRaw(response); // protocol reply, not user input
                 dispatchEvents();
@@ -252,6 +284,11 @@ public final class TerminalSession {
         // Only this thread feeds the emulator, so freeing here is safe;
         // concurrent UI snapshots are fenced by the emulator lock.
         emulator.close();
+        // Last chance the log gets on its own: the reader thread is its only
+        // writer, so closing it here flushes the tail. The files stay for a
+        // restore until SessionManager decides the tab is gone for good.
+        ReplayLog rl = replayLog;
+        if (rl != null) rl.close();
         // A VM session has no child to wait on, so nothing else would ever
         // report its end: it ends when its channel does. Reaching here without
         // close() having run means the machine went away underneath the tab,
@@ -316,6 +353,44 @@ public final class TerminalSession {
     /** True for a userland session (vs. the plain Android shell). */
     public boolean isUserland() {
         return userland;
+    }
+
+    /**
+     * The id {@link SessionManager} registered this session under in
+     * {@link SessionRegistry}, or 0 when it never registered one.
+     */
+    public int sessionId() {
+        return sessionId;
+    }
+
+    /**
+     * The bytes this session has mirrored to disk so far (empty when it has
+     * no log). Used by a restore to hand the scrollback to the rebuilt tab.
+     */
+    public byte[] readReplay() {
+        ReplayLog rl = replayLog;
+        return rl != null ? rl.read() : new byte[0];
+    }
+
+    /**
+     * Points this session's output mirror at a registry id (see
+     * {@link #sessionId()}). Racy by design: bytes already read are not
+     * backfilled, and the shell's early banner is exactly the kind of output
+     * a fresh shell reprints.
+     */
+    void attachReplayLog(ReplayLog log, int id) {
+        sessionId = id;
+        replayLog = log;
+    }
+
+    /** Ends and deletes this session's mirror files (its tab is gone). */
+    void dropReplayLog() {
+        ReplayLog rl = replayLog;
+        if (rl != null) {
+            replayLog = null;
+            rl.delete();
+        }
+        sessionId = 0;
     }
 
     /**
@@ -434,6 +509,8 @@ public final class TerminalSession {
     public void close() {
         if (closed) return;
         closed = true;
+        ReplayLog rl = replayLog;
+        if (rl != null) rl.close(); // flush the tail; files stay for a restore
         if (vm != null) {
             // Detach only. The guest's getty and whatever it is running belong
             // to the machine, not to this tab; closing our dup of the channel
