@@ -47,6 +47,7 @@ public final class AppSettings {
     private static final String KEY_CLIPBOARD_READ = "clipboard_read";
     private static final String KEY_SHOW_PROGRESS = "show_progress";
     private static final String KEY_BIND_EXTERNAL_STORAGE = "bind_external_storage";
+    private static final String KEY_USERLAND_EXTRA_BINDS = "userland_extra_binds";
     private static final String KEY_TERMINATE_PROCESSES_ON_EXIT =
             "terminate_processes_on_exit";
     private static final String KEY_CONFIRM_SESSION_CLOSE = "confirm_session_close";
@@ -455,6 +456,21 @@ public final class AppSettings {
 
     public void setBindExternalStorage(boolean enabled) {
         prefs.edit().putBoolean(KEY_BIND_EXTERNAL_STORAGE, enabled).apply();
+    }
+
+    /**
+     * Raw "Custom bind mounts" setting: one {@code SRC:DST[:ro]} per line
+     * (host path first), bound into every userland session on top of the
+     * built-in /sys and optional storage binds. Empty by default. Validated
+     * and applied by {@link io.github.sylirre.terminal.term.UserlandRootfs}.
+     */
+    public String userlandExtraBinds() {
+        return prefs.getString(KEY_USERLAND_EXTRA_BINDS, "");
+    }
+
+    public void setUserlandExtraBinds(String binds) {
+        prefs.edit().putString(KEY_USERLAND_EXTRA_BINDS,
+                binds == null ? "" : binds).apply();
     }
 
     /**

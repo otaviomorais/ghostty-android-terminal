@@ -95,6 +95,10 @@
     <!-- Settings: Storage binding -->
     <string name="setting_bind_storage_title">Bind device storage</string>
     <string name="setting_bind_storage_summary">Bind Android shared storage directories under /mnt. Applicable only to userland sessions.</string>
+    <string name="setting_extra_binds_title">Custom bind mounts</string>
+    <string name="setting_extra_binds_summary">One SRC:DST[:ro] per line (host path first), bound into new userland sessions — e.g. a single device node. Invalid lines are skipped at spawn.</string>
+    <string name="setting_extra_binds_hint">/dev/kgsl-3d0:/dev/kgsl-3d0</string>
+    <string name="setting_extra_binds_bad_line">Line %1$d is not a valid bind:\n%2$s\n\nWant an existing absolute host path, an absolute guest destination (not /), and at most a :ro/:rw suffix.</string>
     <string name="storage_binding_enabled">Storage binding enabled for new sessions</string>
     <string name="storage_permission_denied">Storage permission is required.</string>
     <string name="storage_permission_settings_unavailable">Storage permission settings are not available on this device.</string>

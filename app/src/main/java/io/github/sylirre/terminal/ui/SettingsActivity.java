@@ -310,6 +310,14 @@ public final class SettingsActivity extends Activity {
                 getString(R.string.setting_bind_storage_summary),
                 settings::bindExternalStorage,
                 this::setBindExternalStorageRequested));
+        userland.add(new Setting.Action(
+                getString(R.string.setting_extra_binds_title),
+                getString(R.string.setting_extra_binds_summary),
+                () -> {
+                    String b = settings.userlandExtraBinds();
+                    return b.isEmpty() ? "" : b.replace("\n", "  •  ");
+                },
+                this::showExtraBindsDialog));
         // Engine choice exists only where libterm.so carries chroot-ng
         // (arm64-v8a builds); elsewhere the row is hidden and arm64chroot is
         // simply what runs. The JIT rows belong to arm64chroot, so they gray
@@ -681,6 +689,33 @@ public final class SettingsActivity extends Activity {
                 this::validateSearchPath,
                 settings::setUserlandPath,
                 () -> settings.setUserlandPath(""));
+    }
+
+    private void showExtraBindsDialog() {
+        Dialogs.promptLines(this, R.string.setting_extra_binds_title,
+                settings.userlandExtraBinds(),
+                getString(R.string.setting_extra_binds_hint),
+                this::validateExtraBinds,
+                settings::setUserlandExtraBinds);
+    }
+
+    /**
+     * Per-line check of the raw bind list: blank lines and {@code #} comments
+     * always pass; every other line must satisfy the rules the engines apply
+     * to {@code --bind} (see UserlandRootfs.isValidBindSpec). Errors name the
+     * offending line number so a long list is fixable in place.
+     */
+    private String validateExtraBinds(String raw) {
+        if (raw.isEmpty()) return null;
+        String[] lines = raw.split("\\R");
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i].trim();
+            if (line.isEmpty() || line.startsWith("#")) continue;
+            if (!UserlandRootfs.isValidBindSpec(line)) {
+                return getString(R.string.setting_extra_binds_bad_line, i + 1, line);
+            }
+        }
+        return null;
     }
 
     /**

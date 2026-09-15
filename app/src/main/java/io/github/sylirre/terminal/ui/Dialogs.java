@@ -10,10 +10,12 @@ import android.text.Editable;
 import android.text.InputType;
 import android.text.TextWatcher;
 import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import java.util.function.Consumer;
@@ -128,6 +130,75 @@ final class Dialogs {
             public void afterTextChanged(Editable s) {
                 error.setVisibility(View.GONE);
             }
+        });
+    }
+
+    /**
+     * A multi-line, monospace text prompt for one-item-per-line settings (the
+     * custom-bind list). Validation runs over the whole trimmed text; the IME
+     * keeps an enter key for adding lines (no single-line), and the value is
+     * passed through verbatim so blank lines/comments survive for the parser.
+     */
+    static void promptLines(Context context, int titleRes, String initial, String hint,
+            Function<String, String> validate, Consumer<String> onOk) {
+        EditText input = new EditText(context);
+        input.setBackground(context.getDrawable(R.drawable.bg_field));
+        int padH = Chrome.dp(context, R.dimen.space_3);
+        int padV = Chrome.dp(context, R.dimen.space_2);
+        input.setPaddingRelative(padH, padV, padH, padV);
+        input.setTextSize(TypedValue.COMPLEX_UNIT_PX, Chrome.dimen(context, R.dimen.text_action));
+        input.setTypeface(Typeface.MONOSPACE);
+        input.setHint(hint);
+        input.setInputType(InputType.TYPE_CLASS_TEXT
+                | InputType.TYPE_TEXT_VARIATION_URI | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        input.setGravity(Gravity.TOP | Gravity.START);
+        input.setMinLines(4);
+        input.setMaxLines(10);
+        input.setHorizontallyScrolling(false);
+        input.setText(initial);
+
+        TextView error = new TextView(context);
+        error.setTextColor(Chrome.color(context, R.color.danger));
+        error.setTextSize(TypedValue.COMPLEX_UNIT_PX, Chrome.dimen(context, R.dimen.text_caption));
+        error.setPaddingRelative(Chrome.dp(context, R.dimen.space_1),
+                Chrome.dp(context, R.dimen.space_1), 0, 0);
+        error.setVisibility(View.GONE);
+
+        ScrollView scroll = new ScrollView(context);
+        scroll.addView(input, new ScrollView.LayoutParams(
+                ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout box = new LinearLayout(context);
+        box.setOrientation(LinearLayout.VERTICAL);
+        int pad = Chrome.dp(context, R.dimen.space_5);
+        box.setPaddingRelative(pad, Chrome.dp(context, R.dimen.space_2), pad, 0);
+        box.addView(scroll, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        box.addView(error);
+
+        AlertDialog dialog = new AlertDialog.Builder(context)
+                .setTitle(titleRes)
+                .setView(box)
+                .setPositiveButton(R.string.action_ok, null)
+                .setNegativeButton(R.string.action_cancel, null)
+                .create();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setSoftInputMode(
+                    WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
+        }
+        dialog.show();
+        input.requestFocus();
+
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String value = input.getText().toString().trim();
+            String message = validate != null ? validate.apply(value) : null;
+            if (message != null) {
+                error.setText(message);
+                error.setVisibility(View.VISIBLE);
+                return;
+            }
+            onOk.accept(value);
+            dialog.dismiss();
         });
     }
 

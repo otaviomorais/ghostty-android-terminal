@@ -44,10 +44,27 @@ public final class UserlandOptions {
      * do not apply to it.
      */
     public final boolean chrootNg;
+    /**
+     * Raw "Custom bind mounts" setting: one {@code SRC:DST[:ro]} per line
+     * (host path first, as the engines' {@code --bind} takes it). Parsed and
+     * validated at spawn by {@link UserlandRootfs#command}; blank/comment
+     * ({@code #}) lines and lines that fail the engine's own rules are
+     * dropped there, so this can carry a partially-invalid list without
+     * bricking a session.
+     */
+    public final String extraBinds;
 
     public UserlandOptions(String loginShell, boolean bindExternalStorage,
             String identity, String home, String workDir, String locale,
             String path, boolean jit, int jitBufferMb, boolean chrootNg) {
+        this(loginShell, bindExternalStorage, identity, home, workDir, locale,
+                path, jit, jitBufferMb, chrootNg, "");
+    }
+
+    public UserlandOptions(String loginShell, boolean bindExternalStorage,
+            String identity, String home, String workDir, String locale,
+            String path, boolean jit, int jitBufferMb, boolean chrootNg,
+            String extraBinds) {
         this.loginShell = loginShell;
         this.bindExternalStorage = bindExternalStorage;
         this.identity = identity;
@@ -58,6 +75,7 @@ public final class UserlandOptions {
         this.jit = jit;
         this.jitBufferMb = jitBufferMb;
         this.chrootNg = chrootNg;
+        this.extraBinds = extraBinds;
     }
 
     /**

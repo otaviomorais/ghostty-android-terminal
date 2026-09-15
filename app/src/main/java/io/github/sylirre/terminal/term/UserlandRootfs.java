@@ -398,6 +398,10 @@ public final class UserlandRootfs {
             argv.add("/sys:/sys");
         }
         if (opts.bindExternalStorage) argv.addAll(StorageBindings.bindArgs(ctx));
+        // User-defined binds (Settings → Custom bind mounts), host path first,
+        // matching the engine's own SRC:DST[:ro] order. Invalid lines are
+        // dropped here so a typo cannot turn every session into a spawn error.
+        argv.addAll(parseExtraBinds(opts.extraBinds));
         // Guest environment via native -E: arm64chroot starts the guest with a
         // clean env (only TERM/COLORTERM are inherited from the host, and we
         // override TERM here), so set the full login env explicitly. HOME comes
@@ -444,6 +448,56 @@ public final class UserlandRootfs {
         return new SessionCommand(null, argv.toArray(new String[0]),
                 env.toArray(new String[0]),
                 cwd, SessionCommand.labelForShell(shellTokens[0]), true);
+    }
+
+    /**
+     * Turns the raw "Custom bind mounts" text (one {@code SRC:DST[:ro]} per
+     * line, host path first — the order both engines take) into engine
+     * arguments: {@code --bind} plus the spec, per accepted line. Blank lines
+     * and {@code #} comments are skipped; a line that would be rejected at
+     * spawn ({@link #isValidBindSpec}) is dropped rather than fatal, so a
+     * half-typed list costs one mount, not every session.
+     */
+    static List<String> parseExtraBinds(String raw) {
+        List<String> args = new ArrayList<>();
+        if (raw == null || raw.trim().isEmpty()) return args;
+        for (String line : raw.split("\\R")) {
+            String spec = line.trim();
+            if (spec.isEmpty() || spec.startsWith("#")) continue;
+            if (isValidBindSpec(spec)) {
+                args.add("--bind");
+                args.add(spec);
+            }
+        }
+        return args;
+    }
+
+    /**
+     * Whether a {@code SRC:DST[:ro]} line honors the checks the engine itself
+     * makes on {@code --bind}: two sides of the first colon, DST absolute and
+     * not {@code /}, SRC absolute and not the host root, no stray colons left
+     * in either path. Adds one practical rule of its own: SRC must exist
+     * now — a missing source is a typo, not a mount that can appear later.
+     * The destination needs no pre-existing entry: the engines splice bind
+     * mount points into listings, and a single file (e.g. a device node) is
+     * exactly what {@code --bind} accepts as a source.
+     *
+     * <p>Public so the settings dialog validates a typed list with the very
+     * rule spawn will apply.
+     */
+    public static boolean isValidBindSpec(String spec) {
+        String s = spec;
+        if (s.endsWith(":ro") || s.endsWith(":rw")) {
+            s = s.substring(0, s.lastIndexOf(':'));
+        }
+        int sep = s.indexOf(':');
+        if (sep <= 0 || sep == s.length() - 1) return false;
+        String src = s.substring(0, sep);
+        String dst = s.substring(sep + 1);
+        if (dst.indexOf(':') >= 0) return false;
+        if (!dst.startsWith("/") || dst.equals("/")) return false;
+        if (!src.startsWith("/") || src.equals("/")) return false;
+        return new File(src).exists();
     }
 
     /**

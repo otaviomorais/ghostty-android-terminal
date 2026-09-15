@@ -24,6 +24,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 /**
  * Login-shell detection against synthetic rootfs layouts. The regression that
@@ -117,6 +118,40 @@ public class UserlandRootfsTest {
         // A path that climbs out of the rootfs never counts, even when the
         // host path it would land on exists.
         assertFalse(UserlandRootfs.guestPathExists(root, "/../../system/bin/sh"));
+    }
+
+    /**
+     * Custom-bind parsing: good lines become engine arguments, blank/comment/
+     * invalid lines vanish silently (a typo costs one mount, not the session),
+     * and validation mirrors the engines' own --bind contract — absolute
+     * existing source, absolute non-root destination, an optional :ro/:rw,
+     * and never the host root as a source.
+     */
+    @Test
+    public void extraBindParsingKeepsOnlyValidLines() throws Exception {
+        File host = new File(root, "keepme");
+        writeFile(host, "");
+        String src = host.getAbsolutePath();
+        List<String> args = UserlandRootfs.parseExtraBinds(
+                "  # a comment\n"
+                        + "\n"
+                        + src + ":/mnt/keep\n"
+                        + src + ":/mnt/ro:ro\n"
+                        + "/no/such/host/path:/mnt/x\n"
+                        + "relative:/mnt/y\n"
+                        + src + ":relative\n"
+                        + src + ":/\n"
+                        + "/:/mnt/escape\n"
+                        + src + ":/mnt/two:colon:seps\n");
+        assertEquals(4, args.size());
+        assertEquals("--bind", args.get(0));
+        assertEquals(src + ":/mnt/keep", args.get(1));
+        assertEquals("--bind", args.get(2));
+        assertEquals(src + ":/mnt/ro:ro", args.get(3));
+        // The settings dialog applies the same rule per line.
+        assertTrue(UserlandRootfs.isValidBindSpec(src + ":/mnt/keep"));
+        assertFalse(UserlandRootfs.isValidBindSpec("/:/mnt/escape"));
+        assertFalse(UserlandRootfs.isValidBindSpec(src + ":/mnt/two:colon:seps"));
     }
 
     private static void writeFile(File file, String content) throws IOException {
